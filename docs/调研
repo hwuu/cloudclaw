@@ -1,0 +1,135 @@
+
+---
+
+## 7. OpenClaw 插件系统说明
+
+### 7.1 插件类型
+
+| 类型 | 说明 | 示例 |
+|------|------|------|
+| **频道插件** | 接入新的聊天平台 | @openclaw/feishu, @openclaw/matrix |
+| **功能插件** | 扩展 AI 能力 | @openclaw/voice-call, @openclaw/diffs |
+| **认证插件** | Provider OAuth | @openclaw/qwen-portal-auth |
+| **记忆插件** | 长期记忆 | memory-lancedb (bundled) |
+
+### 7.2 官方插件列表
+
+**频道插件**：
+- `@openclaw/feishu` - 飞书/Lark
+- `@openclaw/matrix` - Matrix 协议
+- `@openclaw/nostr` - Nostr 协议
+- `@openclaw/zalo` - Zalo (越南)
+- `@openclaw/msteams` - Microsoft Teams
+
+**功能插件**：
+- `@openclaw/voice-call` - 语音通话
+- `@openclaw/diffs` - 代码对比渲染
+
+### 7.3 插件安装方式
+
+**标准安装**：
+```bash
+openclaw plugins install @openclaw/feishu
+```
+
+**指定版本**：
+```bash
+openclaw plugins install @openclaw/feishu@1.0.0
+```
+
+**本地开发**：
+```bash
+openclaw plugins install -l ./my-plugin
+```
+
+**更新插件**：
+```bash
+openclaw plugins update @openclaw/feishu
+openclaw plugins update --all  # 更新所有
+```
+
+### 7.4 插件配置位置
+
+配置文件：`~/.openclaw/config/plugins.yml`
+
+```yaml
+plugins:
+  entries:
+    "@openclaw/feishu":
+      enabled: true
+      config:
+        appId: "cli_xxxxx"
+        appSecret: "${FEISHU_APP_SECRET}"
+```
+
+### 7.5 CloudClaw 集成插件管理
+
+在 CloudClaw 内部集成插件管理：
+
+```go
+// internal/deploy/plugins.go
+
+// InstallPlugin SSH 登录并安装插件
+func InstallPlugin(sshClient *SSHClient, pluginName string) error {
+    cmd := fmt.Sprintf("openclaw plugins install @openclaw/%s", pluginName)
+    _, err := sshClient.Exec(cmd)
+    return err
+}
+
+// EnablePlugin 启用插件
+func EnablePlugin(sshClient *SSHClient, pluginName string) error {
+    cmd := fmt.Sprintf("openclaw plugins enable @openclaw/%s", pluginName)
+    _, err := sshClient.Exec(cmd)
+    return err
+}
+
+// ListPlugins 列出已安装的插件
+func ListPlugins(sshClient *SSHClient) ([]PluginInfo, error) {
+    output, err := sshClient.Exec("openclaw plugins list --json")
+    // 解析 JSON 输出
+}
+```
+
+---
+
+## 8. 最终推荐
+
+### 8.1 国内用户推荐方案
+
+```
+飞书 (Feishu) + WebChat 双通道
+```
+
+**配置步骤**：
+1. 飞书机器人 (主要入口)
+2. WebChat 作为备用 (通过浏览器直接访问)
+
+### 8.2 国际用户推荐方案
+
+```
+Telegram + Discord 双通道
+```
+
+**配置步骤**：
+1. Telegram Bot (主要入口)
+2. Discord Bot (备用/群组)
+
+### 8.3 最简方案 (通用)
+
+```
+WebChat (内置网页)
+```
+
+**配置步骤**：
+- 无需额外配置
+- 直接访问 `https://<your-domain>/chat`
+- 通过 Gateway Token 认证
+
+---
+
+## 9. 参考资料
+
+- OpenClaw 官方文档：https://docs.openclaw.ai/channels
+- 飞书开放平台：https://open.feishu.cn/
+- Telegram Bot API：https://core.telegram.org/bots/api
+- Discord Developer Portal：https://discord.com/developers
