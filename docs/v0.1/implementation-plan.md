@@ -77,7 +77,7 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 
 ---
 
-### 阶段 3: 配置管理模块 (P0)
+### 阶段 3: 配置管理模块 (P0) ✅ 已完成
 
 **目标**：复用 CloudCode 的配置管理，调整为 OpenClaw 配置
 
@@ -88,11 +88,11 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 4. 删除/修改 Authelia 相关文件
 
 **交付物**：
-- [ ] `internal/config/credentials.go`
-- [ ] `internal/config/state.go` (修改)
-- [ ] `internal/config/backup.go`
-- [ ] `internal/config/history.go`
-- [ ] `internal/config/prompt.go` (修改)
+- [x] `internal/config/credentials.go`
+- [x] `internal/config/state.go` (修改)
+- [x] `internal/config/backup.go`
+- [x] `internal/config/history.go`
+- [x] `internal/config/prompt.go` (修改)
 
 **验收标准**：
 - 配置结构体正确 (无 Authelia 字段)
@@ -100,7 +100,7 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 
 ---
 
-### 阶段 4: 模板渲染模块 (P0)
+### 阶段 4: 模板渲染模块 (P0) ✅ 已完成
 
 **目标**：创建 OpenClaw 专用的模板文件
 
@@ -111,10 +111,10 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 4. 创建 `env.tmpl` (环境变量模板)
 
 **交付物**：
-- [ ] `internal/template/render.go`
-- [ ] `internal/template/templates/docker-compose.yml.tmpl`
-- [ ] `internal/template/templates/Caddyfile.tmpl`
-- [ ] `internal/template/templates/env.tmpl`
+- [x] `internal/template/render.go`
+- [x] `internal/template/templates/docker-compose.yml.tmpl`
+- [x] `internal/template/templates/Caddyfile.tmpl`
+- [x] `internal/template/templates/env.tmpl`
 
 **验收标准**：
 - 模板文件语法正确
@@ -122,7 +122,7 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 
 ---
 
-### 阶段 5: 远程连接模块 (P0)
+### 阶段 5: 远程连接模块 (P0) ✅ 已完成
 
 **目标**：复用 CloudCode 的 SSH/SFTP 功能
 
@@ -131,8 +131,8 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 2. 修改包名导入路径
 
 **交付物**：
-- [ ] `internal/remote/ssh.go`
-- [ ] `internal/remote/sftp.go`
+- [x] `internal/remote/ssh.go`
+- [x] `internal/remote/sftp.go`
 
 **验收标准**：
 - 编译通过
