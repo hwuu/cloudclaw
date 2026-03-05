@@ -10,6 +10,8 @@ require (
 	github.com/alibabacloud-go/tea v1.4.0
 	github.com/alibabacloud-go/vpc-20160428/v6 v6.16.0
 	github.com/spf13/cobra v1.10.2
+	golang.org/x/crypto v0.48.0
+	golang.org/x/term v0.40.0
 )
 
 require (
@@ -26,6 +28,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
-	golang.org/x/net v0.26.0 // indirect
+	golang.org/x/net v0.49.0 // indirect
+	golang.org/x/sys v0.41.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 )
