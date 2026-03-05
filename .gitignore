@@ -17,6 +17,9 @@ go.work
 .env
 .env.local
 
+# CloudClaw 本地配置
+~/.cloudclaw/
+
 # IDE
 .idea/
 .vscode/

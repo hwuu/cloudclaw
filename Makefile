@@ -30,7 +30,11 @@ test:
 
 # 代码检查
 lint:
-	golangci-lint run ./...
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run ./...; \
+	else \
+		echo "golangci-lint 未安装，跳过。安装：go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
+	fi
 
 vet:
 	go vet ./...
