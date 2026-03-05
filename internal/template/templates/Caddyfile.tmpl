@@ -1,0 +1,34 @@
+# 主域名 - Web Terminal + OpenClaw
+{{ .Domain }} {
+    # Web Terminal
+    @terminal path /terminal /terminal/*
+    handle @terminal {
+        reverse_proxy devbox:7681
+    }
+
+    # OpenClaw Web UI
+    handle {
+        reverse_proxy devbox:4096
+    }
+
+    log {
+        output stdout
+        format console
+    }
+}
+
+{{ .Domain }}:8443 {
+    @terminal path /terminal /terminal/*
+    handle @terminal {
+        reverse_proxy devbox:7681
+    }
+
+    handle {
+        reverse_proxy devbox:4096
+    }
+
+    log {
+        output stdout
+        format console
+    }
+}

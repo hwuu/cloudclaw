@@ -1,0 +1,45 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8443:8443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - devbox
+    networks:
+      - cloudclaw-net
+
+  devbox:
+    image: ghcr.io/hwuu/openclaw-devbox:{{ .Version }}
+    container_name: devbox
+    restart: unless-stopped
+    init: true
+    volumes:
+      - devbox_workspace:/home/opencode/workspace
+      - devbox_config:/home/opencode/.config/opencode
+      - devbox_data:/home/opencode/.local/share/opencode
+    env_file:
+      - .env
+    expose:
+      - 4096
+      - 7681
+    networks:
+      - cloudclaw-net
+
+volumes:
+  caddy_data:
+  caddy_config:
+  devbox_workspace:
+  devbox_config:
+  devbox_data:
+
+networks:
+  cloudclaw-net:
+    driver: bridge
