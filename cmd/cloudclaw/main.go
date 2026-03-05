@@ -1,6 +1,6 @@
-// Package main is the entry point for CloudClaw CLI.
-// Provides subcommands: version (display version information).
-// Version information is injected at build time via ldflags.
+// Package main 是 CloudClaw CLI 的入口。
+// 提供子命令：version（版本）。
+// 版本信息通过 ldflags 在构建时注入。
 package main
 
 import (
@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Build-time injected via ldflags
+// 构建时通过 ldflags 注入
 var (
 	version = "dev"
 	commit  = "none"
@@ -21,8 +21,8 @@ var (
 func newRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "cloudclaw",
-		Short: "One-click deploy OpenClaw to Alibaba Cloud ECS",
-		Long:  "CloudClaw - One-click deploy OpenClaw to Alibaba Cloud ECS with HTTPS and Gateway Token authentication.",
+		Short: "一键部署 OpenClaw 到阿里云 ECS",
+		Long:  "CloudClaw - 一键部署 OpenClaw 到阿里云 ECS，带 HTTPS + Gateway Token 认证。",
 	}
 
 	rootCmd.AddCommand(newVersionCmd())
@@ -33,7 +33,7 @@ func newRootCmd() *cobra.Command {
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
-		Short: "Display version information",
+		Short: "显示版本信息",
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Printf("cloudclaw %s\n", version)
 			fmt.Printf("  commit: %s\n", commit)
