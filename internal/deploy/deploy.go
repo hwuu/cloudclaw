@@ -1,0 +1,708 @@
+// Package deploy 编排 CloudClaw 的完整部署/销毁/状态查询流程。
+// Deployer 通过依赖注入接收所有外部依赖（阿里云 SDK、SSH、SFTP），完全可 mock 测试。
+//
+// 部署流程分 6 个阶段：
+//  1. PreflightCheck — 验证阿里云凭证
+//  2. PromptConfig — 交互收集域名/GatewayToken 等配置
+//  3. CreateResources — 幂等创建 VPC→VSwitch→安全组→SSH 密钥对→ECS→EIP
+//  4. DeployApp — SSH 连接 ECS，安装 Docker，上传配置，启动容器
+//  5. HealthCheck — 检查容器运行状态
+//  6. 输出访问信息
+package deploy
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/hwuu/cloudclaw/internal/alicloud"
+	"github.com/hwuu/cloudclaw/internal/config"
+	"github.com/hwuu/cloudclaw/internal/remote"
+	tmpl "github.com/hwuu/cloudclaw/internal/template"
+)
+
+// DeployConfig 保存交互收集的部署配置
+type DeployConfig struct {
+	Domain       string // 域名（留空则使用 EIP.nip.io）
+	GatewayToken string // Gateway Token 认证
+	SSHIP        string // SSH 安全组源 IP 限制（CIDR 格式，空表示不限制）
+}
+
+// SSHDialFactory 创建 SSH DialFunc 的工厂函数
+type SSHDialFactory func(host string, port int, user string, privateKey []byte) remote.DialFunc
+
+// SFTPFactory 创建 SFTP 客户端的工厂函数
+type SFTPClientFactory func(host string, port int, user string, privateKey []byte) (remote.SFTPClient, error)
+
+// GetPublicIPFunc 获取用户公网 IP 的函数
+type GetPublicIPFunc func() (string, error)
+
+// Deployer 部署编排器，通过依赖注入支持测试
+type Deployer struct {
+	ECS              alicloud.ECSAPI
+	VPC              alicloud.VPCAPI
+	STS              alicloud.STSAPI
+	DNS              alicloud.DnsAPI
+	Prompter         *config.Prompter
+	Output           io.Writer
+	Region           string
+	StateDir         string // 覆盖默认 state 目录（测试用）
+	SSHDialFunc      SSHDialFactory
+	SFTPFactory      SFTPClientFactory
+	GetPublicIP      GetPublicIPFunc
+	WaitInterval     time.Duration // ECS 等待轮询间隔（测试用，默认 5s）
+	WaitTimeout      time.Duration // ECS 等待超时（测试用，默认 5min）
+	Version          string        // Docker 镜像版本号
+	DNSWaitTimeout   time.Duration // DNS 生效等待超时（默认 5min）
+	SnapshotID       string        // 从快照恢复时的快照 ID
+}
+
+func (d *Deployer) printf(format string, args ...interface{}) {
+	fmt.Fprintf(d.Output, format, args...)
+}
+
+// PreflightCheck 前置检查：验证阿里云凭证
+func (d *Deployer) PreflightCheck(ctx context.Context) error {
+	d.printf("[1/5] 检查环境...\n")
+
+	identity, err := alicloud.GetCallerIdentity(d.STS)
+	if err != nil {
+		return fmt.Errorf("阿里云凭证验证失败：%w", err)
+	}
+
+	d.printf("  ✓ 阿里云账号：%s (UID: %s)\n", identity.AccountID, identity.UserID)
+	return nil
+}
+
+// PromptConfig 交互式收集部署配置
+func (d *Deployer) PromptConfig(ctx context.Context) (*DeployConfig, error) {
+	d.printf("\n[2/5] 配置访问信息:\n")
+
+	cfg := &DeployConfig{}
+
+	// 域名
+	domain, err := d.Prompter.Prompt("请输入域名 (推荐使用自有域名，留空使用 nip.io): ")
+	if err != nil {
+		return nil, err
+	}
+	cfg.Domain = domain // 留空，后续 EIP 分配后填充 nip.io
+
+	// Gateway Token
+	gatewayToken, err := d.Prompter.Prompt("请输入 Gateway Token: ")
+	if err != nil {
+		return nil, err
+	}
+	cfg.GatewayToken = gatewayToken
+
+	return cfg, nil
+}
+
+// CreateResources 创建云资源（幂等：跳过已存在的资源）
+func (d *Deployer) CreateResources(ctx context.Context, state *config.State, sshIP string) error {
+	d.printf("\n[3/5] 创建云资源:\n")
+
+	// VPC
+	if !state.HasVPC() {
+		vpc, err := alicloud.CreateVPC(d.VPC, d.Region, "cloudclaw-vpc")
+		if err != nil {
+			return err
+		}
+		if err := alicloud.WaitVPCAvailable(d.VPC, vpc.ID, d.Region, 60*time.Second); err != nil {
+			return err
+		}
+		state.Resources.VPC = config.VPCResource{ID: vpc.ID, CIDR: vpc.CIDR}
+		if err := d.saveState(state); err != nil {
+			return err
+		}
+		d.printf("  ✓ 创建 VPC (%s)\n", vpc.ID)
+	} else {
+		d.printf("  ✓ VPC 已存在 (%s)\n", state.Resources.VPC.ID)
+	}
+
+	// 可用区选择
+	zoneID := state.Resources.VSwitch.ZoneID
+	if zoneID == "" {
+		var err error
+		zoneID, err = alicloud.SelectAvailableZone(d.ECS, d.Region, alicloud.DefaultInstanceType, alicloud.DefaultZonePriority)
+		if err != nil {
+			return err
+		}
+	}
+
+	// VSwitch
+	if !state.HasVSwitch() {
+		vswitch, err := alicloud.CreateVSwitch(d.VPC, state.Resources.VPC.ID, zoneID, "192.168.1.0/24", "cloudclaw-vswitch")
+		if err != nil {
+			return err
+		}
+		state.Resources.VSwitch = config.VSwitchResource{ID: vswitch.ID, ZoneID: vswitch.ZoneID, CIDR: vswitch.CIDR}
+		if err := d.saveState(state); err != nil {
+			return err
+		}
+		d.printf("  ✓ 创建交换机 (%s)\n", vswitch.ID)
+	} else {
+		d.printf("  ✓ 交换机已存在 (%s)\n", state.Resources.VSwitch.ID)
+	}
+
+	// 安全组
+	if !state.HasSecurityGroup() {
+		sg, err := alicloud.CreateSecurityGroup(d.ECS, state.Resources.VPC.ID, d.Region, "cloudclaw-sg")
+		if err != nil {
+			return err
+		}
+		rules := alicloud.DefaultSecurityGroupRules(sshIP)
+		if err := alicloud.AuthorizeSecurityGroupIngress(d.ECS, sg.ID, d.Region, rules); err != nil {
+			return err
+		}
+		state.Resources.SecurityGroup = config.SecurityGroupResource{ID: sg.ID}
+		if err := d.saveState(state); err != nil {
+			return err
+		}
+		if sshIP != "" {
+			d.printf("  ✓ 创建安全组 (%s) - 开放 80/443, SSH 限制 %s\n", sg.ID, sshIP)
+		} else {
+			d.printf("  ✓ 创建安全组 (%s) - 开放 22/80/443\n", sg.ID)
+		}
+	} else {
+		d.printf("  ✓ 安全组已存在 (%s)\n", state.Resources.SecurityGroup.ID)
+	}
+
+	// SSH 密钥对
+	if !state.HasSSHKeyPair() {
+		keyPair, err := alicloud.CreateSSHKeyPair(d.ECS, alicloud.DefaultSSHKeyName, d.Region)
+		if err != nil {
+			return err
+		}
+		// 保存私钥到本地
+		keyPath := filepath.Join(d.getStateDir(), "ssh_key")
+		if err := os.WriteFile(keyPath, []byte(keyPair.PrivateKey), 0600); err != nil {
+			return fmt.Errorf("保存 SSH 私钥失败：%w", err)
+		}
+		state.Resources.SSHKeyPair = config.SSHKeyPairResource{
+			Name:           keyPair.Name,
+			PrivateKeyPath: ".cloudclaw/ssh_key",
+		}
+		if err := d.saveState(state); err != nil {
+			return err
+		}
+		d.printf("  ✓ 创建 SSH 密钥对 (%s)\n", keyPair.Name)
+	} else {
+		d.printf("  ✓ SSH 密钥对已存在 (%s)\n", state.Resources.SSHKeyPair.Name)
+	}
+
+	// ECS 实例
+	if !state.HasECS() {
+		ecs, err := alicloud.CreateECSInstance(
+			d.ECS, d.Region, zoneID,
+			alicloud.DefaultInstanceType, alicloud.DefaultImageID,
+			state.Resources.SecurityGroup.ID, state.Resources.VSwitch.ID,
+			state.Resources.SSHKeyPair.Name, "cloudclaw-ecs", d.SnapshotID,
+		)
+		if err != nil {
+			return err
+		}
+		state.Resources.ECS = config.ECSResource{
+			ID:           ecs.ID,
+			InstanceType: ecs.InstanceType,
+			PublicIP:     ecs.PublicIP,
+			PrivateIP:    ecs.PrivateIP,
+		}
+		if err := d.saveState(state); err != nil {
+			return err
+		}
+		d.printf("  ✓ 创建 ECS 实例 (%s)\n", ecs.ID)
+
+		// 清理从快照创建的临时镜像
+		if ecs.TempImageID != "" {
+			_ = alicloud.DeleteImage(d.ECS, ecs.TempImageID, d.Region)
+			d.printf("  ✓ 清理临时镜像 (%s)\n", ecs.TempImageID)
+		}
+
+		// 等待实例就绪（Pending → Stopped）
+		if err := alicloud.WaitForInstanceStatus(ctx, d.ECS, ecs.ID, d.Region, "Stopped", d.WaitInterval, d.WaitTimeout); err != nil {
+			return fmt.Errorf("等待 ECS 实例就绪失败：%w", err)
+		}
+
+		// 启动实例
+		if err := alicloud.StartECSInstance(d.ECS, ecs.ID); err != nil {
+			return fmt.Errorf("启动 ECS 实例失败：%w", err)
+		}
+
+		// 等待 Running
+		ecsInfo, err := alicloud.WaitForInstanceRunning(ctx, d.ECS, ecs.ID, d.Region, d.WaitInterval, d.WaitTimeout)
+		if err != nil {
+			return err
+		}
+		state.Resources.ECS.PrivateIP = ecsInfo.PrivateIP
+		state.Resources.ECS.PublicIP = ecsInfo.PublicIP
+		if err := d.saveState(state); err != nil {
+			return err
+		}
+		d.printf("  ✓ ECS 实例已运行\n")
+	} else {
+		d.printf("  ✓ ECS 实例已存在 (%s)\n", state.Resources.ECS.ID)
+	}
+
+	// EIP
+	if !state.HasEIP() {
+		eip, err := alicloud.AllocateEIP(d.VPC, d.Region, "cloudclaw-eip")
+		if err != nil {
+			return err
+		}
+		// 绑定 EIP 到 ECS
+		if err := alicloud.AssociateEIPToInstance(d.VPC, eip.ID, state.Resources.ECS.ID, d.Region); err != nil {
+			return fmt.Errorf("绑定 EIP 失败：%w", err)
+		}
+		state.Resources.EIP = config.EIPResource{ID: eip.ID, IP: eip.IP}
+		state.Resources.ECS.PublicIP = eip.IP
+		if err := d.saveState(state); err != nil {
+			return err
+		}
+		d.printf("  ✓ 分配 EIP (%s) - IP: %s\n", eip.ID, eip.IP)
+	} else {
+		d.printf("  ✓ EIP 已存在 (%s) - IP: %s\n", state.Resources.EIP.ID, state.Resources.EIP.IP)
+	}
+
+	return nil
+}
+
+// SetupDNS 配置自有域名的 DNS 记录
+func (d *Deployer) SetupDNS(ctx context.Context, domain, eip string) error {
+	d.printf("\n  配置 DNS:\n")
+
+	if d.DNS == nil {
+		// 无 DNS 客户端，提示手动配置
+		return d.manualDNS(domain, eip)
+	}
+
+	// 查询阿里云 DNS 域名列表
+	domains, err := alicloud.ListDomains(d.DNS)
+	if err != nil {
+		d.printf("  ⚠ 查询阿里云 DNS 失败：%v\n", err)
+		return d.manualDNS(domain, eip)
+	}
+
+	baseDomain, rr, err := alicloud.FindBaseDomain(domain, domains)
+	if err != nil {
+		// 域名不在阿里云 DNS，提示手动配置
+		d.printf("  域名 %s 不在阿里云 DNS 中\n", domain)
+		return d.manualDNS(domain, eip)
+	}
+
+	// 自动更新 A 记录
+	d.printf("  自动更新 DNS 记录 (%s)...\n", baseDomain)
+
+	if err := alicloud.EnsureDNSRecord(d.DNS, baseDomain, rr, eip); err != nil {
+		return fmt.Errorf("DNS 记录更新失败：%w", err)
+	}
+	d.printf("  ✓ %s → %s\n", domain, eip)
+
+	return nil
+}
+
+// manualDNS 提示用户手动配置 DNS 并等待生效
+func (d *Deployer) manualDNS(domain, eip string) error {
+	d.printf("  请手动配置 DNS A 记录:\n")
+	d.printf("    %s  →  %s\n", domain, eip)
+	d.printf("  等待 DNS 生效...\n")
+
+	timeout := d.DNSWaitTimeout
+	if timeout == 0 {
+		timeout = 5 * time.Minute
+	}
+
+	if err := waitForDNS(domain, eip, timeout, d.printf); err != nil {
+		return err
+	}
+	d.printf("  ✓ DNS 已生效\n")
+	return nil
+}
+
+// DeployApp 部署应用（SSH → Docker → 模板 → 上传 → compose up）
+func (d *Deployer) DeployApp(ctx context.Context, state *config.State, cfg *DeployConfig) error {
+	d.printf("\n[4/5] 部署应用:\n")
+
+	// 读取 SSH 私钥
+	privateKey, err := d.readSSHKey(state)
+	if err != nil {
+		return err
+	}
+
+	eipIP := state.Resources.EIP.IP
+
+	// 等待 SSH 就绪
+	dialFunc := d.SSHDialFunc(eipIP, 22, "root", privateKey)
+	sshClient, err := remote.WaitForSSH(ctx, dialFunc, remote.WaitSSHOptions{})
+	if err != nil {
+		return fmt.Errorf("SSH 连接失败：%w", err)
+	}
+	defer sshClient.Close()
+	d.printf("  ✓ SSH 连接成功\n")
+
+	// 等待 apt 锁释放（Ubuntu 新实例 unattended-upgrades 可能占锁）
+	waitAptCmd := "for i in $(seq 1 60); do fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break; sleep 5; done"
+	if _, err := sshClient.RunCommand(ctx, waitAptCmd); err != nil {
+		d.printf("  ⚠ 等待 apt 锁超时，继续尝试安装\n")
+	}
+
+	// 安装 Docker
+	dockerCmd := "which docker > /dev/null 2>&1 || (curl -fsSL https://get.docker.com | sh -s -- --mirror Aliyun && systemctl enable docker && systemctl start docker)"
+	cmdCtx, cancel := context.WithTimeout(ctx, remote.DockerInstallTimeout)
+	defer cancel()
+	if _, err := sshClient.RunCommand(cmdCtx, dockerCmd); err != nil {
+		return fmt.Errorf("安装 Docker 失败：%w", err)
+	}
+	d.printf("  ✓ Docker 已就绪\n")
+
+	// 创建远程目录
+	mkdirCmd := "mkdir -p ~/cloudclaw"
+	if _, err := sshClient.RunCommand(ctx, mkdirCmd); err != nil {
+		return fmt.Errorf("创建远程目录失败：%w", err)
+	}
+
+	// 确定域名
+	domain := cfg.Domain
+	if domain == "" {
+		domain = eipIP + ".nip.io"
+	}
+
+	// 渲染模板
+	templateData := &tmpl.TemplateData{
+		Domain:       domain,
+		GatewayToken: cfg.GatewayToken,
+		Version:      d.Version,
+	}
+
+	files, err := tmpl.RenderAll(templateData)
+	if err != nil {
+		return fmt.Errorf("模板渲染失败：%w", err)
+	}
+	d.printf("  ✓ 配置文件已渲染\n")
+
+	// 上传文件
+	uploadFiles := make(map[string][]byte)
+	for path, content := range files {
+		remotePath := strings.Replace(path, "~/cloudclaw", "/root/cloudclaw", 1)
+		uploadFiles[remotePath] = content
+	}
+
+	sftpClient, err := d.SFTPFactory(eipIP, 22, "root", privateKey)
+	if err != nil {
+		return fmt.Errorf("SFTP 连接失败：%w", err)
+	}
+	defer sftpClient.Close()
+
+	if err := remote.UploadFiles(sftpClient, uploadFiles); err != nil {
+		return fmt.Errorf("上传文件失败：%w", err)
+	}
+	d.printf("  ✓ 配置文件已上传\n")
+
+	// 拉取 Docker 镜像
+	images := []struct {
+		name    string
+		service string
+	}{
+		{"Caddy", "caddy"},
+		{"Devbox", "devbox"},
+	}
+	for i, img := range images {
+		d.printf("  * 正在拉取 Docker 镜像 (%d/%d) %s...\n", i+1, len(images), img.name)
+		pullCmd := fmt.Sprintf("cd ~/cloudclaw && docker compose pull %s", img.service)
+		pullCtx, pullCancel := context.WithTimeout(ctx, 10*time.Minute)
+		if _, err := sshClient.RunCommand(pullCtx, pullCmd); err != nil {
+			pullCancel()
+			return fmt.Errorf("拉取 %s 镜像失败：%w", img.name, err)
+		}
+		pullCancel()
+	}
+	d.printf("  ✓ Docker 镜像已拉取\n")
+
+	// docker compose up
+	upCmd := "cd ~/cloudclaw && docker compose up -d --force-recreate"
+	upCtx, upCancel := context.WithTimeout(ctx, remote.DockerInstallTimeout)
+	defer upCancel()
+	if _, err := sshClient.RunCommand(upCtx, upCmd); err != nil {
+		return fmt.Errorf("启动 Docker Compose 失败：%w", err)
+	}
+	d.printf("  ✓ Docker Compose 已启动\n")
+
+	// 更新 state 中的域名
+	state.Gateway.Domain = domain
+
+	return nil
+}
+
+// HealthCheck 健康检查：通过 SSH 检查容器状态
+func (d *Deployer) HealthCheck(ctx context.Context, state *config.State) error {
+	d.printf("\n[5/5] 验证服务:\n")
+
+	privateKey, err := d.readSSHKey(state)
+	if err != nil {
+		return err
+	}
+
+	dialFunc := d.SSHDialFunc(state.Resources.EIP.IP, 22, "root", privateKey)
+	sshClient, err := remote.WaitForSSH(ctx, dialFunc, remote.WaitSSHOptions{
+		Timeout: 30 * time.Second,
+	})
+	if err != nil {
+		return fmt.Errorf("SSH 连接失败：%w", err)
+	}
+	defer sshClient.Close()
+
+	output, err := sshClient.RunCommand(ctx, "cd ~/cloudclaw && docker compose ps --format '{{.Name}} {{.State}}'")
+	if err != nil {
+		return fmt.Errorf("检查容器状态失败：%w", err)
+	}
+
+	d.printf("  容器状态:\n")
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line != "" {
+			d.printf("    %s\n", line)
+			// 如果容器不健康，抓取日志
+			parts := strings.Fields(line)
+			if len(parts) >= 2 && parts[1] != "running" {
+				logs, logErr := sshClient.RunCommand(ctx, fmt.Sprintf("cd ~/cloudclaw && docker compose logs --tail=30 %s 2>&1", parts[0]))
+				if logErr == nil && logs != "" {
+					d.printf("    [%s 日志]:\n", parts[0])
+					for _, logLine := range strings.Split(strings.TrimSpace(logs), "\n") {
+						d.printf("      %s\n", logLine)
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// Run 执行完整部署流程
+func (d *Deployer) Run(ctx context.Context, appOnly bool) error {
+	// --app 模式：仅重部署应用层
+	if appOnly {
+		state, err := d.loadState()
+		if err != nil {
+			return fmt.Errorf("未找到部署记录，请先运行 cloudclaw deploy")
+		}
+		if !state.IsComplete() {
+			return fmt.Errorf("云资源不完整，请先运行 cloudclaw deploy 完成部署")
+		}
+		if state.Status == "suspended" {
+			return fmt.Errorf("实例已停机，请先运行 cloudclaw resume")
+		}
+
+		cfg := &DeployConfig{
+			Domain: state.Gateway.Domain,
+		}
+
+		d.printf("重新部署应用层...\n")
+		d.printf("  域名：%s\n\n", cfg.Domain)
+
+		if err := d.DeployApp(ctx, state, cfg); err != nil {
+			return err
+		}
+		if err := d.saveState(state); err != nil {
+			return err
+		}
+		if err := d.HealthCheck(ctx, state); err != nil {
+			d.printf("  ⚠ 健康检查失败：%v\n", err)
+		}
+		d.printf("\n✅ 应用层重部署完成\n")
+		return nil
+	}
+
+	// 阶段 1: 前置检查
+	if err := d.PreflightCheck(ctx); err != nil {
+		return err
+	}
+
+	// 加载或创建 state
+	state, err := d.loadState()
+	if err != nil {
+		state = config.NewState(d.Region, alicloud.DefaultImageID)
+	}
+
+	// 检查已有实例状态
+	if state.Status == "running" {
+		d.printf("\n已有运行中的实例，无需重新部署。\n")
+		d.printf("  查看状态：cloudclaw status\n")
+		d.printf("  重新部署应用层：cloudclaw deploy --app\n")
+		return nil
+	}
+	if state.Status == "suspended" {
+		return fmt.Errorf("实例已停机，请使用 cloudclaw resume 恢复运行")
+	}
+
+	// 从快照恢复
+	var backupCfg *config.Backup
+	if state.Status == "destroyed" {
+		dir := d.getStateDir()
+		backupCfg, _ = config.LoadBackupFrom(dir)
+		if backupCfg != nil && backupCfg.SnapshotID != "" {
+			d.printf("\n检测到快照 (%s)，将从快照恢复部署。\n", backupCfg.SnapshotID)
+			d.SnapshotID = backupCfg.SnapshotID
+		}
+		// 重置资源（destroyed 状态下资源已删除）
+		state = config.NewState(d.Region, alicloud.DefaultImageID)
+	}
+
+	if state.IsComplete() {
+		d.printf("\n已检测到完整部署，使用 --app 重新部署应用层\n")
+		return nil
+	}
+
+	// 阶段 2: 交互配置
+	var cfg *DeployConfig
+	if backupCfg != nil && backupCfg.Domain != "" {
+		// 快照恢复：复用 backup 中的域名
+		d.printf("\n[2/5] 使用快照配置:\n")
+		d.printf("  域名：%s\n", backupCfg.Domain)
+		cfg = &DeployConfig{
+			Domain: backupCfg.Domain,
+		}
+	} else {
+		var err error
+		cfg, err = d.PromptConfig(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	// 阶段 3: 创建云资源
+	if !state.IsComplete() {
+		if err := d.CreateResources(ctx, state, cfg.SSHIP); err != nil {
+			return err
+		}
+	}
+
+	// 填充 nip.io 域名
+	if cfg.Domain == "" {
+		cfg.Domain = state.Resources.EIP.IP + ".nip.io"
+	}
+
+	// DNS 配置（自有域名时）
+	if cfg.Domain != "" && !strings.HasSuffix(cfg.Domain, ".nip.io") {
+		if err := d.SetupDNS(ctx, cfg.Domain, state.Resources.EIP.IP); err != nil {
+			return err
+		}
+	}
+
+	// 更新 state
+	state.Gateway.Domain = cfg.Domain
+	state.Status = "running"
+
+	// 阶段 4: 部署应用
+	if err := d.DeployApp(ctx, state, cfg); err != nil {
+		return err
+	}
+
+	// 保存最终 state
+	if err := d.saveState(state); err != nil {
+		return err
+	}
+
+	// 阶段 5: 健康检查
+	if err := d.HealthCheck(ctx, state); err != nil {
+		// 健康检查失败不阻塞，仅警告
+		d.printf("  ⚠ 健康检查失败：%v\n", err)
+	}
+
+	// 输出成功信息
+	d.printSuccess(state, cfg)
+
+	return nil
+}
+
+func (d *Deployer) printSuccess(state *config.State, cfg *DeployConfig) {
+	d.printf("\n─────────────────────────────────────────────────────────────\n")
+	d.printf("✅ 部署完成！\n\n")
+	d.printf("访问地址：https://%s\n", state.Gateway.Domain)
+	d.printf("\n")
+	d.printf("提示:\n")
+	d.printf("  - 查看状态：cloudclaw status\n")
+	d.printf("  - SSH 登录：cloudclaw ssh\n")
+	d.printf("  - 容器命令：cloudclaw exec devbox <cmd>\n")
+	d.printf("  - 停机省钱：cloudclaw suspend\n")
+	d.printf("  - 恢复运行：cloudclaw resume\n")
+	d.printf("  - 清理资源：cloudclaw destroy\n")
+	d.printf("─────────────────────────────────────────────────────────────\n")
+}
+
+// --- 内部辅助方法 ---
+
+func (d *Deployer) getStateDir() string {
+	if d.StateDir != "" {
+		return d.StateDir
+	}
+	dir, _ := config.GetStateDir()
+	return dir
+}
+
+func (d *Deployer) loadState() (*config.State, error) {
+	if d.StateDir != "" {
+		return loadStateFrom(d.StateDir)
+	}
+	return config.LoadState()
+}
+
+func (d *Deployer) saveState(state *config.State) error {
+	if d.StateDir != "" {
+		return saveStateTo(d.StateDir, state)
+	}
+	return config.SaveState(state)
+}
+
+func (d *Deployer) readSSHKey(state *config.State) ([]byte, error) {
+	return readSSHKeyFrom(d.getStateDir(), state)
+}
+
+// readSSHKeyFrom 从指定目录读取 SSH 私钥（共享函数）
+func readSSHKeyFrom(stateDir string, state *config.State) ([]byte, error) {
+	dir := stateDir
+	if dir == "" {
+		var err error
+		dir, _ = config.GetStateDir()
+		if err != nil {
+			return nil, err
+		}
+	}
+	keyPath := filepath.Join(dir, "ssh_key")
+	data, err := os.ReadFile(keyPath)
+	if err != nil {
+		return nil, fmt.Errorf("读取 SSH 私钥失败：%w", err)
+	}
+	return data, nil
+}
+
+func loadStateFrom(dir string) (*config.State, error) {
+	path := filepath.Join(dir, config.StateFileName)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, config.ErrStateNotFound
+		}
+		return nil, err
+	}
+	var state config.State
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, err
+	}
+	return &state, nil
+}
+
+func saveStateTo(dir string, state *config.State) error {
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, config.StateFileName)
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0600)
+}

@@ -139,7 +139,7 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 
 ---
 
-### 阶段 6: 部署编排模块 (P0)
+### 阶段 6: 部署编排模块 (P0) ✅ 已完成
 
 **目标**：复用 CloudCode 的部署流程，修改应用层部署
 
@@ -151,12 +151,12 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 5. 保持 `suspend.go` 和 `resume.go` 不变
 
 **交付物**：
-- [ ] `internal/deploy/deploy.go` (修改)
-- [ ] `internal/deploy/destroy.go` (修改)
-- [ ] `internal/deploy/suspend.go`
-- [ ] `internal/deploy/resume.go`
-- [ ] `internal/deploy/status.go` (修改)
-- [ ] `internal/deploy/dns.go`
+- [x] `internal/deploy/deploy.go` (修改)
+- [x] `internal/deploy/destroy.go` (修改)
+- [x] `internal/deploy/suspend.go`
+- [x] `internal/deploy/resume.go`
+- [x] `internal/deploy/status.go` (修改)
+- [x] `internal/deploy/dns.go`
 
 **验收标准**：
 - 部署流程正确
@@ -202,7 +202,7 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 4. 实现 `plugins enable` 命令
 
 **交付物**：
-- [ ] `internal/deploy/plugins.go`
+- [x] `internal/deploy/plugins.go`
 - [ ] `cmd/cloudclaw/main.go` (plugins 子命令)
 
 **验收标准**：
@@ -222,7 +222,7 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 4. 交互式配置流程
 
 **交付物**：
-- [ ] `internal/deploy/channels.go`
+- [x] `internal/deploy/channels.go`
 - [ ] `cmd/cloudclaw/main.go` (channels 子命令)
 
 **验收标准**：
