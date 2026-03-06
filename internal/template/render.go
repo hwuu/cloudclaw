@@ -23,6 +23,11 @@ type TemplateData struct {
 	Domain       string // 域名
 	GatewayToken string // Gateway Token 认证
 	Version      string // Docker 镜像版本号
+
+	// 可选字段（留空则不渲染对应配置）
+	OpenAIAPIKey    string // OpenAI API 密钥
+	OpenAIBaseURL   string // OpenAI API 基础 URL
+	AnthropicAPIKey string // Anthropic API 密钥
 }
 
 // 模板文件（需要渲染）
