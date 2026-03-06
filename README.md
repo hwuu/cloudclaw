@@ -9,7 +9,7 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 - **一键部署**: `cloudclaw deploy` 完成所有云资源创建和应用部署
 - **HTTPS 自动配置**: 使用 Caddy 自动管理 HTTPS 证书
 - **Gateway Token 认证**: 内置 Gateway 访问令牌认证
-- **多频道支持**: 支持飞书、Telegram、Discord、Slack 等聊天渠道
+- **多频道支持**: 支持飞书、Telegram、Discord、企业微信等聊天渠道
 - **停机省钱**: suspend/resume 功能，停机仅收磁盘费
 - **快照恢复**: destroy 时可选保留快照
 - **OSS 状态存储**: 跨机器共享状态，支持中断恢复
@@ -67,13 +67,12 @@ export ALICLOUD_ACCESS_KEY_SECRET="your_access_key_secret"
 
 ## 支持的聊天渠道
 
-| 渠道 | 配置难度 | 推荐度 |
-|------|----------|--------|
-| Telegram | ⭐⭐ 简单 | ⭐⭐⭐⭐⭐ 最推荐 |
-| 飞书 (Feishu) | ⭐⭐⭐ 中等 | ⭐⭐⭐⭐ 推荐 |
-| Discord | ⭐⭐ 简单 | ⭐⭐⭐⭐ 推荐 |
-| Slack | ⭐⭐⭐ 中等 | ⭐⭐⭐⭐ 推荐 |
-| WebChat | ⭐ 最简单 | ⭐⭐⭐ 通用 |
+| 渠道 | 配置难度 | 推荐度 | 必需参数 |
+|------|----------|--------|----------|
+| Telegram | ⭐⭐ 简单 | ⭐⭐⭐⭐⭐ 最推荐 | --bot-token, --chat-id |
+| 飞书 (Feishu) | ⭐⭐⭐ 中等 | ⭐⭐⭐⭐ 推荐 | --webhook-url |
+| Discord | ⭐⭐ 简单 | ⭐⭐⭐⭐ 推荐 | --webhook-url |
+| 企业微信 (Wechat) | ⭐⭐⭐ 中等 | ⭐⭐⭐⭐ 推荐 | --webhook-url |
 
 ## 架构
 

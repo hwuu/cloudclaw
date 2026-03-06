@@ -74,7 +74,7 @@ func (m *PluginManager) ListPlugins(ctx context.Context) ([]PluginInfo, error) {
 	}
 	defer sshClient.Close()
 
-	// 获取已安装插件列表
+	// 获取已安装插件列表和启用状态
 	output, err := sshClient.RunCommand(ctx, `
 		if [ -d /root/cloudclaw/plugins ]; then
 			ls /root/cloudclaw/plugins
@@ -92,15 +92,17 @@ func (m *PluginManager) ListPlugins(ctx context.Context) ([]PluginInfo, error) {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			installedMap[line] = true
+			// 检查插件是否启用（通过 .enabled 文件判断）
+			enabled := m.isPluginEnabled(ctx, sshClient, line)
 			if info, ok := knownPlugins[line]; ok {
 				info.Installed = true
-				info.Enabled = true // 默认已安装的插件都是启用的
+				info.Enabled = enabled
 				plugins = append(plugins, info)
 			} else {
 				plugins = append(plugins, PluginInfo{
 					Name:      line,
 					Installed: true,
-					Enabled:   true,
+					Enabled:   enabled,
 				})
 			}
 		}
@@ -141,6 +143,15 @@ func (m *PluginManager) InstallPlugin(ctx context.Context, pluginName string) er
 		return fmt.Errorf("SSH 连接失败：%w", err)
 	}
 	defer sshClient.Close()
+
+	// 检查插件是否已安装
+	installed, err := m.isPluginInstalled(ctx, state, pluginName)
+	if err != nil {
+		return err
+	}
+	if installed {
+		return fmt.Errorf("插件 %s 已安装，请先卸载后再安装", pluginName)
+	}
 
 	m.printf("正在安装插件 %s...\n", pluginName)
 
@@ -354,6 +365,15 @@ func (m *PluginManager) isPluginInstalled(ctx context.Context, state *config.Sta
 		return false, nil // 目录不存在，返回 false
 	}
 	return strings.Contains(output, "exists"), nil
+}
+
+// isPluginEnabled 检查插件是否已启用（通过 .enabled 文件判断）
+func (m *PluginManager) isPluginEnabled(ctx context.Context, sshClient remote.SSHClient, pluginName string) bool {
+	output, err := sshClient.RunCommand(ctx, fmt.Sprintf("test -f /root/cloudclaw/plugins/%s/.enabled && echo 'yes'", pluginName))
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(output) == "yes"
 }
 
 func (m *PluginManager) restartGateway(ctx context.Context, sshClient remote.SSHClient) error {

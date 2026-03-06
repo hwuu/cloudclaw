@@ -164,50 +164,51 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 
 ---
 
-### 阶段 7: CLI 命令实现 (P0)
+### 阶段 7: CLI 命令实现 (P0) ✅ 已完成
 
 **目标**：实现完整的 CLI 命令
 
 **任务**：
-1. 完善 `cmd/cloudclaw/main.go`
-2. 实现 `init` 命令
-3. 实现 `deploy` 命令
-4. 实现 `status` 命令
-5. 实现 `destroy` 命令
-6. 实现 `suspend` 命令
-7. 实现 `resume` 命令
-8. 实现 `logs` 命令
-9. 实现 `ssh` 命令
-10. 实现 `exec` 命令
-11. 实现 `config` 命令
-12. 实现 `version` 命令
+1. 完善 `cmd/cloudclaw/main.go` ✅
+2. 实现 `init` 命令 ✅
+3. 实现 `deploy` 命令 ✅
+4. 实现 `status` 命令 ✅
+5. 实现 `destroy` 命令 ✅
+6. 实现 `suspend` 命令 ✅
+7. 实现 `resume` 命令 ✅
+8. 实现 `logs` 命令 ✅
+9. 实现 `ssh` 命令 ✅
+10. 实现 `exec` 命令 ✅
+11. 实现 `config` 命令 ✅
+12. 实现 `version` 命令 ✅
 
 **交付物**：
-- [ ] `cmd/cloudclaw/main.go` (完整)
+- [x] `cmd/cloudclaw/main.go` (完整)
 
 **验收标准**：
-- 所有命令可正常执行
-- 帮助文本正确
+- 所有命令可正常执行 ✅
+- 帮助文本正确 ✅
 
 ---
 
-### 阶段 8: 插件管理命令 (P1)
+### 阶段 8: 插件管理命令 (P1) ✅ 已完成
 
 **目标**：实现 OpenClaw 插件管理功能
 
 **任务**：
-1. 实现 `plugins list` 命令
-2. 实现 `plugins install` 命令
-3. 实现 `plugins uninstall` 命令
-4. 实现 `plugins enable` 命令
+1. 实现 `plugins list` 命令 ✅
+2. 实现 `plugins install` 命令 ✅
+3. 实现 `plugins uninstall` 命令 ✅
+4. 实现 `plugins enable` 命令 ✅
 
 **交付物**：
 - [x] `internal/deploy/plugins.go`
-- [ ] `cmd/cloudclaw/main.go` (plugins 子命令)
+- [x] `cmd/cloudclaw/main.go` (plugins 子命令)
+- [x] `tests/unit/deploy/plugins_test.go` (12 个测试用例)
 
 **验收标准**：
-- 可通过 SSH 安装/卸载插件
-- 支持飞书、Telegram 等插件
+- 可通过 SSH 安装/卸载插件 ✅
+- 支持飞书、Telegram 等插件 ✅
 
 ---
 
@@ -216,40 +217,42 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 **目标**：实现聊天渠道配置功能
 
 **任务**：
-1. 实现 `channels add` 命令
-2. 实现 `channels list` 命令
-3. 实现 `channels remove` 命令
-4. 交互式配置流程
+1. 实现 `channels add` 命令 ✅
+2. 实现 `channels list` 命令 ✅
+3. 实现 `channels remove` 命令 ✅
+4. 交互式配置流程 ✅
 
 **交付物**：
 - [x] `internal/deploy/channels.go`
 - [x] `cmd/cloudclaw/main.go` (channels 子命令)
+- [x] `tests/unit/deploy/channels_test.go` (12 个测试用例)
 
 **验收标准**：
-- 支持飞书、Telegram 等渠道配置
-- 配置后自动重启 Gateway
+- 支持飞书、Telegram 等渠道配置 ✅
+- 配置后自动重启 Gateway ✅
 
 ---
 
-### 阶段 10: 单元测试 (P1)
+### 阶段 10: 单元测试 (P1) 🔄 进行中
 
 **目标**：编写单元测试保证质量
 
 **任务**：
-1. 创建 `tests/unit/` 目录
-2. 编写配置模块测试
-3. 编写部署模块测试
-4. 编写模板渲染测试
+1. 创建 `tests/unit/` 目录 ✅
+2. 编写配置模块测试 ✅
+3. 编写部署模块测试 ✅
+4. 编写模板渲染测试 ✅
 
 **交付物**：
+- [x] `tests/unit/config/` (credentials_test.go, backup_test.go, state_test.go)
+- [x] `tests/unit/deploy/` (plugins_test.go, channels_test.go, helper_test.go)
+- [x] `tests/unit/template/` (render_test.go)
+- [x] `tests/unit/remote/` (ssh_test.go, sftp_test.go)
 - [ ] `tests/unit/main_test.go`
-- [ ] `tests/unit/config_test.go`
-- [ ] `tests/unit/template_test.go`
-- [ ] `tests/unit/deploy_test.go`
 
 **验收标准**：
-- `make test` 运行通过
-- 关键逻辑有测试覆盖
+- `make test` 运行通过 ✅
+- 关键逻辑有测试覆盖 ✅
 
 ---
 
@@ -273,18 +276,18 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 
 ---
 
-### 阶段 12: 文档编写 (P2)
+### 阶段 12: 文档编写 (P2) 🔄 进行中
 
 **目标**：完善项目文档
 
 **任务**：
-1. 完善 `README.md`
+1. 完善 `README.md` ✅
 2. 编写 `INSTALL.md` (安装指南)
 3. 编写 `USAGE.md` (使用指南)
 4. 更新设计文档
 
 **交付物**：
-- [ ] `README.md`
+- [x] `README.md` (已更新)
 - [ ] `docs/INSTALL.md`
 - [ ] `docs/USAGE.md`
 
@@ -306,11 +309,11 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
                                       ↓
                     阶段 8 (plugins) → 阶段 9 (channels)
                                       ↓
-                                    阶段 10 (测试)
+                                    阶段 10 (测试) 🔄
                                       ↓
                                     阶段 11 (E2E)
                                       ↓
-                                    阶段 12 (文档)
+                                    阶段 12 (文档) 🔄
 ```
 
 ---
@@ -367,4 +370,6 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 4. **用户审核** - 关键阶段后人工审核 ✅
 5. **开始阶段 2** - 阿里云 SDK 封装 ✅
 6. **完成阶段 2** - 阿里云 SDK 封装完成 ✅
-7. **下一步** - 进入阶段 3: 配置管理模块
+7. **下一步** - 进入阶段 3: 配置管理模块 ✅
+8. **完成阶段 3-9** - 核心功能完成 ✅
+9. **当前** - 阶段 10 (单元测试) 和 阶段 12 (文档) 进行中 🔄

@@ -15,11 +15,21 @@ import (
 type mockDeploySSHClient struct {
 	failOnCommand bool
 	commandOutput string
+	// 支持根据不同命令返回不同输出
+	commandOutputs map[string]string
 }
 
 func (m *mockDeploySSHClient) RunCommand(ctx context.Context, cmd string) (string, error) {
 	if m.failOnCommand {
 		return "", context.DeadlineExceeded
+	}
+	// 如果指定了命令级别的输出，优先使用
+	if m.commandOutputs != nil {
+		for pattern, output := range m.commandOutputs {
+			if strings.Contains(cmd, pattern) {
+				return output, nil
+			}
+		}
 	}
 	return m.commandOutput, nil
 }
@@ -47,7 +57,14 @@ func setupTestDir(t *testing.T) string {
 // TestPluginManager_ListPlugins_Success 测试列出插件成功场景
 func TestPluginManager_ListPlugins_Success(t *testing.T) {
 	mockClient := &mockDeploySSHClient{
-		commandOutput: "feishu\ntelegram",
+		commandOutputs: map[string]string{
+			// 列出插件目录
+			"ls /root/cloudclaw/plugins": "feishu\ntelegram",
+			// 检查 .enabled 文件存在（feishu 已启用）
+			"test -f /root/cloudclaw/plugins/feishu/.enabled": "yes",
+			// 检查 .enabled 文件存在（telegram 已启用）
+			"test -f /root/cloudclaw/plugins/telegram/.enabled": "yes",
+		},
 	}
 
 	tempDir := setupTestDir(t)
@@ -104,7 +121,15 @@ func TestPluginManager_ListPlugins_NoDeployment(t *testing.T) {
 // TestPluginManager_InstallPlugin_Success 测试安装插件成功场景
 func TestPluginManager_InstallPlugin_Success(t *testing.T) {
 	mockClient := &mockDeploySSHClient{
-		commandOutput: "exists",
+		commandOutputs: map[string]string{
+			// 检查安装状态时返回空（未安装）
+			"ls /root/cloudclaw/plugins/feishu": "",
+			// 其他命令返回成功
+			"mkdir":   "",
+			"cat >":   "",
+			"touch":   "",
+			"docker":  "",
+		},
 	}
 
 	tempDir := setupTestDir(t)
@@ -146,7 +171,13 @@ func TestPluginManager_InstallPlugin_UnknownPlugin(t *testing.T) {
 // TestPluginManager_UninstallPlugin_Success 测试卸载插件成功场景
 func TestPluginManager_UninstallPlugin_Success(t *testing.T) {
 	mockClient := &mockDeploySSHClient{
-		commandOutput: "exists",
+		commandOutputs: map[string]string{
+			// 检查安装状态时返回存在
+			"ls /root/cloudclaw/plugins/feishu": "exists",
+			// 其他命令返回成功
+			"rm":      "",
+			"docker":  "",
+		},
 	}
 
 	tempDir := setupTestDir(t)
@@ -197,7 +228,13 @@ func TestPluginManager_UninstallPlugin_NotInstalled(t *testing.T) {
 // TestPluginManager_EnablePlugin_Success 测试启用插件成功场景
 func TestPluginManager_EnablePlugin_Success(t *testing.T) {
 	mockClient := &mockDeploySSHClient{
-		commandOutput: "exists",
+		commandOutputs: map[string]string{
+			// 检查安装状态时返回存在
+			"ls /root/cloudclaw/plugins/feishu": "exists",
+			// 其他命令返回成功
+			"touch":  "",
+			"docker": "",
+		},
 	}
 
 	tempDir := setupTestDir(t)
@@ -248,7 +285,13 @@ func TestPluginManager_EnablePlugin_NotInstalled(t *testing.T) {
 // TestPluginManager_DisablePlugin_Success 测试禁用插件成功场景
 func TestPluginManager_DisablePlugin_Success(t *testing.T) {
 	mockClient := &mockDeploySSHClient{
-		commandOutput: "exists",
+		commandOutputs: map[string]string{
+			// 检查安装状态时返回存在
+			"ls /root/cloudclaw/plugins/feishu": "exists",
+			// 其他命令返回成功
+			"rm":     "",
+			"docker": "",
+		},
 	}
 
 	tempDir := setupTestDir(t)
@@ -309,5 +352,90 @@ func TestPluginManager_ListPlugins_SSHFailure(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SSH 连接失败") {
 		t.Errorf("ListPlugins() error = %v, want 'SSH 连接失败'", err)
+	}
+}
+
+// TestPluginManager_InstallPlugin_AlreadyInstalled 测试重复安装场景
+func TestPluginManager_InstallPlugin_AlreadyInstalled(t *testing.T) {
+	mockClient := &mockDeploySSHClient{
+		commandOutputs: map[string]string{
+			// 检查安装状态时返回存在（已安装）
+			"ls /root/cloudclaw/plugins/feishu": "exists",
+		},
+	}
+
+	tempDir := setupTestDir(t)
+	pm := &deploy.PluginManager{
+		Output: io.Discard,
+		SSHDialFunc: func(host string, port int, user string, privateKey []byte) remote.DialFunc {
+			return func() (remote.SSHClient, error) {
+				return mockClient, nil
+			}
+		},
+		StateDir: tempDir,
+	}
+
+	ctx := context.Background()
+	err := pm.InstallPlugin(ctx, "feishu")
+	if err == nil {
+		t.Fatal("InstallPlugin() error = nil, want error for already installed plugin")
+	}
+	if !strings.Contains(err.Error(), "已安装") {
+		t.Errorf("InstallPlugin() error = %v, want '已安装'", err)
+	}
+}
+
+// TestPluginManager_ListPlugins_WithDisabledPlugin 测试列出插件包含禁用插件场景
+func TestPluginManager_ListPlugins_WithDisabledPlugin(t *testing.T) {
+	mockClient := &mockDeploySSHClient{
+		commandOutputs: map[string]string{
+			// 列出插件目录
+			"ls /root/cloudclaw/plugins": "feishu\ntelegram",
+			// 检查 .enabled 文件存在（feishu 已启用）
+			"test -f /root/cloudclaw/plugins/feishu/.enabled": "yes",
+			// 检查 .enabled 文件不存在（telegram 已禁用）
+			"test -f /root/cloudclaw/plugins/telegram/.enabled": "",
+		},
+	}
+
+	tempDir := setupTestDir(t)
+	pm := &deploy.PluginManager{
+		Output: io.Discard,
+		SSHDialFunc: func(host string, port int, user string, privateKey []byte) remote.DialFunc {
+			return func() (remote.SSHClient, error) {
+				return mockClient, nil
+			}
+		},
+		StateDir: tempDir,
+	}
+
+	ctx := context.Background()
+	plugins, err := pm.ListPlugins(ctx)
+	if err != nil {
+		t.Fatalf("ListPlugins() error = %v", err)
+	}
+
+	// 验证 feishu 已启用
+	foundEnabled := false
+	for _, p := range plugins {
+		if p.Name == "feishu" && p.Installed && p.Enabled {
+			foundEnabled = true
+			break
+		}
+	}
+	if !foundEnabled {
+		t.Error("ListPlugins() should mark feishu as enabled")
+	}
+
+	// 验证 telegram 已安装但禁用
+	foundDisabled := false
+	for _, p := range plugins {
+		if p.Name == "telegram" && p.Installed && !p.Enabled {
+			foundDisabled = true
+			break
+		}
+	}
+	if !foundDisabled {
+		t.Error("ListPlugins() should mark telegram as disabled")
 	}
 }
