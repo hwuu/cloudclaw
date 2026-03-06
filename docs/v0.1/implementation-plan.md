@@ -211,7 +211,7 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 
 ---
 
-### 阶段 9: 渠道配置命令 (P1)
+### 阶段 9: 渠道配置命令 (P1) ✅ 已完成
 
 **目标**：实现聊天渠道配置功能
 
@@ -223,7 +223,7 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 
 **交付物**：
 - [x] `internal/deploy/channels.go`
-- [ ] `cmd/cloudclaw/main.go` (channels 子命令)
+- [x] `cmd/cloudclaw/main.go` (channels 子命令)
 
 **验收标准**：
 - 支持飞书、Telegram 等渠道配置
