@@ -1,5 +1,5 @@
 // Package main 是 CloudClaw CLI 的入口。
-// 提供子命令：deploy（部署）、destroy（销毁）、status（状态）、suspend（停机）、resume（恢复）、ssh（登录）、exec（容器命令）、plugins（插件管理）、version（版本）。
+// 提供子命令：deploy（部署）、destroy（销毁）、status（状态）、suspend（停机）、resume（恢复）、ssh（登录）、exec（容器命令）、plugins（插件管理）、channels（渠道管理）、version（版本）。
 // 版本信息通过 ldflags 在构建时注入。
 package main
 
@@ -84,6 +84,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newSSHCmd())
 	rootCmd.AddCommand(newExecCmd())
 	rootCmd.AddCommand(newPluginsCmd())
+	rootCmd.AddCommand(newChannelsCmd())
 
 	return rootCmd
 }
@@ -717,6 +718,178 @@ func newPluginsDisableCmd() *cobra.Command {
 			}
 
 			return pm.EnablePlugin(ctx, pluginName, false)
+		},
+	}
+}
+
+// newChannelsCmd 渠道配置命令
+func newChannelsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "channels",
+		Short: "渠道管理",
+		Long:  "管理 OpenClaw 消息通知渠道，支持添加、列出、删除渠道。",
+	}
+
+	cmd.AddCommand(newChannelsListCmd())
+	cmd.AddCommand(newChannelsAddCmd())
+	cmd.AddCommand(newChannelsRemoveCmd())
+	cmd.AddCommand(newChannelsEnableCmd())
+	cmd.AddCommand(newChannelsDisableCmd())
+
+	return cmd
+}
+
+// newChannelsListCmd 列出渠道命令
+func newChannelsListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "列出渠道",
+		Long:  "列出所有已配置的渠道。",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+
+			cm := &deploy.ChannelManager{
+				Output:      os.Stdout,
+				SSHDialFunc: createSSHDialFunc(),
+			}
+
+			channels, err := cm.ListChannels(ctx)
+			if err != nil {
+				return err
+			}
+
+			if len(channels) == 0 {
+				fmt.Println("暂无渠道")
+				return nil
+			}
+
+			fmt.Printf("%-15s %-10s %-20s %-8s\n", "名称", "类型", "配置", "状态")
+			fmt.Println(strings.Repeat("-", 70))
+			for _, ch := range channels {
+				status := "已禁用"
+				if ch.Enabled {
+					status = "已启用"
+				}
+				configPreview := ch.Config
+				if len(configPreview) > 30 {
+					configPreview = configPreview[:30] + "..."
+				}
+				fmt.Printf("%-15s %-10s %-20s %-8s\n", ch.Name, ch.Type, configPreview, status)
+			}
+			return nil
+		},
+	}
+}
+
+// newChannelsAddCmd 添加渠道命令
+func newChannelsAddCmd() *cobra.Command {
+	var channelType, webhookURL, botToken, chatID, secret string
+
+	cmd := &cobra.Command{
+		Use:   "add <name>",
+		Short: "添加渠道",
+		Long:  "添加新的消息通知渠道，支持飞书、Telegram、Discord、企业微信。",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			name := args[0]
+
+			cfg := deploy.ChannelConfig{}
+			switch channelType {
+			case "feishu", "wechat", "discord":
+				if webhookURL == "" {
+					return fmt.Errorf("%s 渠道需要指定 --webhook-url 参数", channelType)
+				}
+				cfg.WebhookURL = webhookURL
+				cfg.Secret = secret
+			case "telegram":
+				if botToken == "" || chatID == "" {
+					return fmt.Errorf("Telegram 渠道需要指定 --bot-token 和 --chat-id 参数")
+				}
+				cfg.BotToken = botToken
+				cfg.ChatID = chatID
+			default:
+				return fmt.Errorf("不支持的渠道类型：%s", channelType)
+			}
+
+			cm := &deploy.ChannelManager{
+				Output:      os.Stdout,
+				SSHDialFunc: createSSHDialFunc(),
+			}
+
+			return cm.AddChannel(ctx, name, channelType, cfg)
+		},
+	}
+
+	cmd.Flags().StringVar(&channelType, "type", "", "渠道类型 (feishu/telegram/discord/wechat)")
+	cmd.MarkFlagRequired("type")
+	cmd.Flags().StringVar(&webhookURL, "webhook-url", "", "Webhook URL (feishu/wechat/discord)")
+	cmd.Flags().StringVar(&botToken, "bot-token", "", "Bot Token (telegram)")
+	cmd.Flags().StringVar(&chatID, "chat-id", "", "Chat ID (telegram)")
+	cmd.Flags().StringVar(&secret, "secret", "", "加签密钥 (feishu 可选)")
+
+	return cmd
+}
+
+// newChannelsRemoveCmd 删除渠道命令
+func newChannelsRemoveCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "remove <name>",
+		Short: "删除渠道",
+		Long:  "删除指定的渠道配置。",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			name := args[0]
+
+			cm := &deploy.ChannelManager{
+				Output:      os.Stdout,
+				SSHDialFunc: createSSHDialFunc(),
+			}
+
+			return cm.RemoveChannel(ctx, name)
+		},
+	}
+}
+
+// newChannelsEnableCmd 启用渠道命令
+func newChannelsEnableCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "enable <name>",
+		Short: "启用渠道",
+		Long:  "启用指定的渠道。",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			name := args[0]
+
+			cm := &deploy.ChannelManager{
+				Output:      os.Stdout,
+				SSHDialFunc: createSSHDialFunc(),
+			}
+
+			return cm.EnableChannel(ctx, name, true)
+		},
+	}
+}
+
+// newChannelsDisableCmd 禁用渠道命令
+func newChannelsDisableCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "disable <name>",
+		Short: "禁用渠道",
+		Long:  "禁用指定的渠道。",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			name := args[0]
+
+			cm := &deploy.ChannelManager{
+				Output:      os.Stdout,
+				SSHDialFunc: createSSHDialFunc(),
+			}
+
+			return cm.EnableChannel(ctx, name, false)
 		},
 	}
 }

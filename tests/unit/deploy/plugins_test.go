@@ -2,10 +2,7 @@ package deploy
 
 import (
 	"context"
-	"encoding/json"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -31,39 +28,6 @@ func (m *mockDeploySSHClient) Close() error {
 	return nil
 }
 
-// saveTestState 保存测试 state 到指定目录
-func saveTestState(dir string, state *config.State) error {
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
-	path := filepath.Join(dir, config.StateFileName)
-	data, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0600)
-}
-
-// saveTestSSHKey 保存测试 SSH 私钥到指定目录
-func saveTestSSHKey(dir string) error {
-	// 一个简单的测试用 RSA 私钥（格式正确但不可实际使用）
-	testPrivateKey := `-----BEGIN OPENSSH PRIVATE KEY-----
-b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAlwAAAAdzc2gtcn
-NhAAAAAwEAAQAAAIEA0Z3VS5JJcds3xfn/ygWyF8PbnGy0AHB7MxUKpQ5rY5rXkqQHqMl6
-j5H8R3bNjkH3K6kP9Q3H9j3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V
-3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K
-3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V
-3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K
-3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V
-3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K
-3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V
-3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K
-3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V
-3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K3V3K
------END OPENSSH PRIVATE KEY-----`
-	return os.WriteFile(filepath.Join(dir, "ssh_key"), []byte(testPrivateKey), 0600)
-}
-
 // setupTestDir 创建测试目录和文件
 func setupTestDir(t *testing.T) string {
 	tempDir := t.TempDir()
@@ -75,8 +39,8 @@ func setupTestDir(t *testing.T) string {
 			EIP: config.EIPResource{ID: "eip-test", IP: "1.2.3.4"},
 		},
 	}
-	saveTestState(tempDir, state)
-	saveTestSSHKey(tempDir)
+	saveTestStateHelper(tempDir, state)
+	saveTestSSHKeyHelper(tempDir)
 	return tempDir
 }
 
@@ -88,7 +52,7 @@ func TestPluginManager_ListPlugins_Success(t *testing.T) {
 
 	tempDir := setupTestDir(t)
 	pm := &deploy.PluginManager{
-		Output: io.Discard, // 测试时丢弃输出
+		Output: io.Discard,
 		SSHDialFunc: func(host string, port int, user string, privateKey []byte) remote.DialFunc {
 			return func() (remote.SSHClient, error) {
 				return mockClient, nil
@@ -145,7 +109,7 @@ func TestPluginManager_InstallPlugin_Success(t *testing.T) {
 
 	tempDir := setupTestDir(t)
 	pm := &deploy.PluginManager{
-		Output: io.Discard, // 测试时丢弃输出
+		Output: io.Discard,
 		SSHDialFunc: func(host string, port int, user string, privateKey []byte) remote.DialFunc {
 			return func() (remote.SSHClient, error) {
 				return mockClient, nil
