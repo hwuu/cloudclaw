@@ -1,5 +1,5 @@
 // Package main 是 CloudClaw CLI 的入口。
-// 提供子命令：deploy（部署）、destroy（销毁）、status（状态）、suspend（停机）、resume（恢复）、ssh（登录）、exec（容器命令）、version（版本）。
+// 提供子命令：deploy（部署）、destroy（销毁）、status（状态）、suspend（停机）、resume（恢复）、ssh（登录）、exec（容器命令）、plugins（插件管理）、version（版本）。
 // 版本信息通过 ldflags 在构建时注入。
 package main
 
@@ -83,6 +83,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newResumeCmd())
 	rootCmd.AddCommand(newSSHCmd())
 	rootCmd.AddCommand(newExecCmd())
+	rootCmd.AddCommand(newPluginsCmd())
 
 	return rootCmd
 }
@@ -575,6 +576,149 @@ func (w *sftpClientWrapper) Close() error {
 		return sftpErr
 	}
 	return sshErr
+}
+
+// newPluginsCmd 插件管理命令
+func newPluginsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "plugins",
+		Short: "插件管理",
+		Long:  "管理 OpenClaw 插件，支持安装、卸载、启用/禁用插件。",
+	}
+
+	cmd.AddCommand(newPluginsListCmd())
+	cmd.AddCommand(newPluginsInstallCmd())
+	cmd.AddCommand(newPluginsUninstallCmd())
+	cmd.AddCommand(newPluginsEnableCmd())
+	cmd.AddCommand(newPluginsDisableCmd())
+
+	return cmd
+}
+
+// newPluginsListCmd 列出插件命令
+func newPluginsListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "列出插件",
+		Long:  "列出所有可用插件及安装状态。",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+
+			pm := &deploy.PluginManager{
+				Output:      os.Stdout,
+				SSHDialFunc: createSSHDialFunc(),
+			}
+
+			plugins, err := pm.ListPlugins(ctx)
+			if err != nil {
+				return err
+			}
+
+			if len(plugins) == 0 {
+				fmt.Println("暂无插件")
+				return nil
+			}
+
+			fmt.Printf("%-12s %-30s %-10s %-8s\n", "名称", "描述", "版本", "状态")
+			fmt.Println(strings.Repeat("-", 70))
+			for _, p := range plugins {
+				status := "未安装"
+				if p.Installed {
+					if p.Enabled {
+						status = "已启用"
+					} else {
+						status = "已禁用"
+					}
+				}
+				fmt.Printf("%-12s %-30s %-10s %-8s\n", p.Name, p.Description, p.Version, status)
+			}
+			return nil
+		},
+	}
+}
+
+// newPluginsInstallCmd 安装插件命令
+func newPluginsInstallCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "install <plugin>",
+		Short: "安装插件",
+		Long:  "安装指定的插件，支持 feishu、telegram、discord、wechat 等。",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			pluginName := args[0]
+
+			pm := &deploy.PluginManager{
+				Output:      os.Stdout,
+				SSHDialFunc: createSSHDialFunc(),
+			}
+
+			return pm.InstallPlugin(ctx, pluginName)
+		},
+	}
+}
+
+// newPluginsUninstallCmd 卸载插件命令
+func newPluginsUninstallCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "uninstall <plugin>",
+		Short: "卸载插件",
+		Long:  "卸载指定的已安装插件。",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			pluginName := args[0]
+
+			pm := &deploy.PluginManager{
+				Output:      os.Stdout,
+				SSHDialFunc: createSSHDialFunc(),
+			}
+
+			return pm.UninstallPlugin(ctx, pluginName)
+		},
+	}
+}
+
+// newPluginsEnableCmd 启用插件命令
+func newPluginsEnableCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "enable <plugin>",
+		Short: "启用插件",
+		Long:  "启用指定的已安装插件。",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			pluginName := args[0]
+
+			pm := &deploy.PluginManager{
+				Output:      os.Stdout,
+				SSHDialFunc: createSSHDialFunc(),
+			}
+
+			return pm.EnablePlugin(ctx, pluginName, true)
+		},
+	}
+}
+
+// newPluginsDisableCmd 禁用插件命令
+func newPluginsDisableCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "disable <plugin>",
+		Short: "禁用插件",
+		Long:  "禁用指定的已安装插件。",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			pluginName := args[0]
+
+			pm := &deploy.PluginManager{
+				Output:      os.Stdout,
+				SSHDialFunc: createSSHDialFunc(),
+			}
+
+			return pm.EnablePlugin(ctx, pluginName, false)
+		},
+	}
 }
 
 func main() {
