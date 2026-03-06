@@ -12,14 +12,14 @@ import (
 )
 
 const (
-	DefaultInstanceType       = "ecs.e-c1m2.large"                       // 默认实例规格：2vCPU 4GiB
+	DefaultInstanceType       = "ecs.e-c1m2.large"                          // 默认实例规格：2vCPU 4GiB
 	DefaultImageID            = "ubuntu_24_04_x64_20G_alibase_20260119.vhd" // Ubuntu 24.04 镜像（新加坡区域完整格式）
-	DefaultSystemDiskSize     = 60                                        // 系统盘大小（GB）
-	DefaultSystemDiskCategory = "cloud_essd"                              // 系统盘类型：ESSD 云盘
-	DefaultSSHKeyName         = "cloudclaw-ssh-key"                       // SSH 密钥对名称
+	DefaultSystemDiskSize     = 60                                          // 系统盘大小（GB）
+	DefaultSystemDiskCategory = "cloud_essd"                                // 系统盘类型：ESSD 云盘
+	DefaultSSHKeyName         = "cloudclaw-ssh-key"                         // SSH 密钥对名称
 
-	DefaultWaitInterval = 5 * time.Second  // 状态轮询间隔
-	DefaultWaitTimeout  = 5 * time.Minute  // 状态等待超时
+	DefaultWaitInterval = 5 * time.Second // 状态轮询间隔
+	DefaultWaitTimeout  = 5 * time.Minute // 状态等待超时
 )
 
 // DefaultZonePriority 新加坡区域可用区优先级（按库存充足程度排序）
@@ -48,7 +48,7 @@ type ZoneInfo struct {
 // DescribeAvailableZones 查询指定区域的可用区列表及其资源可用性
 func DescribeAvailableZones(ecsCli ECSAPI, regionID, instanceType string) ([]ZoneInfo, error) {
 	req := &ecsclient.DescribeZonesRequest{
-		RegionId:          &regionID,
+		RegionId:           &regionID,
 		InstanceChargeType: teaString("PostPaid"),
 	}
 

@@ -44,22 +44,22 @@ type GetPublicIPFunc func() (string, error)
 
 // Deployer 部署编排器，通过依赖注入支持测试
 type Deployer struct {
-	ECS              alicloud.ECSAPI
-	VPC              alicloud.VPCAPI
-	STS              alicloud.STSAPI
-	DNS              alicloud.DnsAPI
-	Prompter         *config.Prompter
-	Output           io.Writer
-	Region           string
-	StateDir         string // 覆盖默认 state 目录（测试用）
-	SSHDialFunc      SSHDialFactory
-	SFTPFactory      SFTPClientFactory
-	GetPublicIP      GetPublicIPFunc
-	WaitInterval     time.Duration // ECS 等待轮询间隔（测试用，默认 5s）
-	WaitTimeout      time.Duration // ECS 等待超时（测试用，默认 5min）
-	Version          string        // Docker 镜像版本号
-	DNSWaitTimeout   time.Duration // DNS 生效等待超时（默认 5min）
-	SnapshotID       string        // 从快照恢复时的快照 ID
+	ECS            alicloud.ECSAPI
+	VPC            alicloud.VPCAPI
+	STS            alicloud.STSAPI
+	DNS            alicloud.DnsAPI
+	Prompter       *config.Prompter
+	Output         io.Writer
+	Region         string
+	StateDir       string // 覆盖默认 state 目录（测试用）
+	SSHDialFunc    SSHDialFactory
+	SFTPFactory    SFTPClientFactory
+	GetPublicIP    GetPublicIPFunc
+	WaitInterval   time.Duration // ECS 等待轮询间隔（测试用，默认 5s）
+	WaitTimeout    time.Duration // ECS 等待超时（测试用，默认 5min）
+	Version        string        // Docker 镜像版本号
+	DNSWaitTimeout time.Duration // DNS 生效等待超时（默认 5min）
+	SnapshotID     string        // 从快照恢复时的快照 ID
 }
 
 func (d *Deployer) printf(format string, args ...interface{}) {

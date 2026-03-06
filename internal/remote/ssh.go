@@ -15,11 +15,11 @@ var (
 
 // 超时常量
 const (
-	DefaultInitialInterval = 1 * time.Second   // SSH 重试初始间隔
-	DefaultMaxInterval     = 10 * time.Second  // SSH 重试最大间隔（指数退避上限）
-	DefaultSSHTimeout      = 2 * time.Minute   // SSH 连接总超时
-	DefaultCommandTimeout  = 5 * time.Minute   // 单条命令执行超时
-	DockerInstallTimeout   = 10 * time.Minute  // Docker 安装超时（含下载）
+	DefaultInitialInterval = 1 * time.Second  // SSH 重试初始间隔
+	DefaultMaxInterval     = 10 * time.Second // SSH 重试最大间隔（指数退避上限）
+	DefaultSSHTimeout      = 2 * time.Minute  // SSH 连接总超时
+	DefaultCommandTimeout  = 5 * time.Minute  // 单条命令执行超时
+	DockerInstallTimeout   = 10 * time.Minute // Docker 安装超时（含下载）
 )
 
 // SSHClient 抽象 SSH 连接，支持 mock 测试

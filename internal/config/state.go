@@ -13,8 +13,8 @@ import (
 
 const (
 	StateFileVersion = "1.0"
-	StateDirName     = ".cloudclaw"  // 状态目录，位于用户 home 下
-	StateFileName    = "state.json"  // 状态文件名
+	StateDirName     = ".cloudclaw" // 状态目录，位于用户 home 下
+	StateFileName    = "state.json" // 状态文件名
 )
 
 var (
@@ -46,10 +46,11 @@ type SecurityGroupResource struct {
 
 // ECSResource ECS 实例资源
 type ECSResource struct {
-	ID           string `json:"id"`
-	InstanceType string `json:"instance_type"`
-	PublicIP     string `json:"public_ip"`
-	PrivateIP    string `json:"private_ip"`
+	ID             string `json:"id"`
+	InstanceType   string `json:"instance_type"`
+	PublicIP       string `json:"public_ip"`
+	PrivateIP      string `json:"private_ip"`
+	SystemDiskSize int    `json:"system_disk_size,omitempty"`
 }
 
 // EIPResource 弹性公网 IP 资源

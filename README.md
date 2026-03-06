@@ -29,8 +29,9 @@ make build
 ### 使用
 
 ```bash
-# 1. 初始化配置（输入阿里云凭证）
-./bin/cloudclaw init
+# 1. 设置阿里云凭证（环境变量或配置文件）
+export ALICLOUD_ACCESS_KEY_ID="your_access_key"
+export ALICLOUD_ACCESS_KEY_SECRET="your_access_key_secret"
 
 # 2. 一键部署 OpenClaw
 ./bin/cloudclaw deploy
@@ -52,18 +53,16 @@ make build
 
 | 命令 | 说明 |
 |------|------|
-| `init` | 配置阿里云凭证并创建 OSS bucket |
 | `deploy` | 一键部署 OpenClaw |
+| `deploy --app` | 仅重部署应用层（不创建云资源） |
 | `status` | 查看部署状态 |
 | `destroy` | 销毁所有云资源（可选保留快照） |
+| `destroy --force` | 跳过确认直接销毁 |
+| `destroy --dry-run` | 仅预览，不实际删除 |
 | `suspend` | 停机（停止计费，仅收磁盘费） |
 | `resume` | 恢复运行 |
-| `logs` | 查看容器日志 |
 | `ssh` | SSH 登录 ECS |
 | `exec` | 在容器内执行命令 |
-| `plugins` | 管理 OpenClaw 插件 |
-| `channels` | 管理聊天渠道 |
-| `config` | 查看或修改配置 |
 | `version` | 显示版本信息 |
 
 ## 支持的聊天渠道
