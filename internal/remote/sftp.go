@@ -18,12 +18,12 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// realSSHClient 真实 SSH 客户端实现
-type realSSHClient struct {
+// sshClient SSH 客户端实现
+type sshClient struct {
 	client *ssh.Client
 }
 
-// NewSSHDialFunc 创建真实 SSH 连接的 DialFunc
+// NewSSHDialFunc 创建 SSH 连接的 DialFunc
 func NewSSHDialFunc(host string, port int, user string, privateKey []byte) DialFunc {
 	return func() (SSHClient, error) {
 		signer, err := ssh.ParsePrivateKey(privateKey)
@@ -46,13 +46,13 @@ func NewSSHDialFunc(host string, port int, user string, privateKey []byte) DialF
 			return nil, fmt.Errorf("SSH 连接失败 (%s): %w", addr, err)
 		}
 
-		return &realSSHClient{client: client}, nil
+		return &sshClient{client: client}, nil
 	}
 }
 
 // RunCommand 在远程执行命令，支持 context 超时取消。
 // 返回 stdout 内容；失败时错误信息包含 stderr。
-func (c *realSSHClient) RunCommand(ctx context.Context, cmd string) (string, error) {
+func (c *sshClient) RunCommand(ctx context.Context, cmd string) (string, error) {
 	session, err := c.client.NewSession()
 	if err != nil {
 		return "", fmt.Errorf("创建 SSH session 失败：%w", err)
@@ -80,17 +80,17 @@ func (c *realSSHClient) RunCommand(ctx context.Context, cmd string) (string, err
 	}
 }
 
-func (c *realSSHClient) Close() error {
+func (c *sshClient) Close() error {
 	return c.client.Close()
 }
 
-// realSFTPClient 真实 SFTP 客户端实现
-type realSFTPClient struct {
+// sftpClient SFTP 客户端实现
+type sftpClient struct {
 	sftpClient *sftp.Client
 	sshClient  *ssh.Client
 }
 
-// NewSFTPClient 创建真实 SFTP 客户端
+// NewSFTPClient 创建 SFTP 客户端
 func NewSFTPClient(host string, port int, user string, privateKey []byte) (SFTPClient, error) {
 	signer, err := ssh.ParsePrivateKey(privateKey)
 	if err != nil {
@@ -118,14 +118,14 @@ func NewSFTPClient(host string, port int, user string, privateKey []byte) (SFTPC
 		return nil, fmt.Errorf("SFTP 连接失败：%w", err)
 	}
 
-	return &realSFTPClient{
+	return &sftpClient{
 		sftpClient: sftpConn,
 		sshClient:  sshConn,
 	}, nil
 }
 
 // UploadFile 上传文件内容到远程路径（自动创建父目录）
-func (c *realSFTPClient) UploadFile(localContent []byte, remotePath string) error {
+func (c *sftpClient) UploadFile(localContent []byte, remotePath string) error {
 	// 自动创建远程目录
 	dir := filepath.Dir(remotePath)
 	if err := c.sftpClient.MkdirAll(dir); err != nil {
@@ -145,7 +145,7 @@ func (c *realSFTPClient) UploadFile(localContent []byte, remotePath string) erro
 	return nil
 }
 
-func (c *realSFTPClient) Close() error {
+func (c *sftpClient) Close() error {
 	c.sftpClient.Close()
 	return c.sshClient.Close()
 }
