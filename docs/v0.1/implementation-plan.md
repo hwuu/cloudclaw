@@ -276,7 +276,7 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 
 ---
 
-### 阶段 12: 文档编写 (P2) 🔄 进行中
+### 阶段 12: 文档编写 (P2) ✅ 已完成
 
 **目标**：完善项目文档
 
@@ -288,8 +288,8 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 
 **交付物**：
 - [x] `README.md` (已更新)
-- [ ] `docs/INSTALL.md`
-- [ ] `docs/USAGE.md`
+- [x] `docs/INSTALL.md`
+- [x] `docs/USAGE.md`
 
 **验收标准**：
 - 文档完整清晰
@@ -313,7 +313,7 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
                                       ↓
                                     阶段 11 (E2E)
                                       ↓
-                                    阶段 12 (文档)
+                                    阶段 12 (文档) ✅
 ```
 
 ---
@@ -373,4 +373,4 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 7. **下一步** - 进入阶段 3: 配置管理模块 ✅
 8. **完成阶段 3-9** - 核心功能完成 ✅
 10. **完成阶段 10** - 单元测试全部完成 ✅
-11. **当前** - 可选：阶段 11 (E2E 测试) 或 阶段 12 (文档)
+11. **当前** - 可选：阶段 11 (E2E 测试) 或 阶段 12 (文档) ✅
