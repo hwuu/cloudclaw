@@ -136,7 +136,9 @@ func TestTemplateFileList(t *testing.T) {
 func TestStaticFileList(t *testing.T) {
 	files := tmpl.StaticFileList()
 	// 当前静态文件列表为空，但测试保留以便未来扩展
-	_ = files
+	if len(files) != 0 {
+		t.Errorf("StaticFileList() = %v, want empty slice", files)
+	}
 }
 
 // TestGetStaticFile 测试静态文件读取（当前无静态文件）
