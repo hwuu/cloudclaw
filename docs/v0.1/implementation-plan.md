@@ -233,7 +233,7 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 
 ---
 
-### 阶段 10: 单元测试 (P1) 🔄 进行中
+### 阶段 10: 单元测试 (P1) ✅ 已完成
 
 **目标**：编写单元测试保证质量
 
@@ -248,7 +248,7 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 - [x] `tests/unit/deploy/` (plugins_test.go, channels_test.go, helper_test.go)
 - [x] `tests/unit/template/` (render_test.go)
 - [x] `tests/unit/remote/` (ssh_test.go, sftp_test.go)
-- [ ] `tests/unit/main_test.go`
+- [x] `tests/unit/main_test.go` (28 个测试用例)
 
 **验收标准**：
 - `make test` 运行通过 ✅
@@ -309,11 +309,11 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
                                       ↓
                     阶段 8 (plugins) → 阶段 9 (channels)
                                       ↓
-                                    阶段 10 (测试) 🔄
+                                    阶段 10 (测试) ✅
                                       ↓
                                     阶段 11 (E2E)
                                       ↓
-                                    阶段 12 (文档) 🔄
+                                    阶段 12 (文档)
 ```
 
 ---
@@ -372,4 +372,5 @@ CloudClaw 是一个类似 CloudCode 的 CLI 工具，用于一键部署 OpenClaw
 6. **完成阶段 2** - 阿里云 SDK 封装完成 ✅
 7. **下一步** - 进入阶段 3: 配置管理模块 ✅
 8. **完成阶段 3-9** - 核心功能完成 ✅
-9. **当前** - 阶段 10 (单元测试) 和 阶段 12 (文档) 进行中 🔄
+10. **完成阶段 10** - 单元测试全部完成 ✅
+11. **当前** - 可选：阶段 11 (E2E 测试) 或 阶段 12 (文档)

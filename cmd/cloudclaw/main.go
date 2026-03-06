@@ -89,6 +89,11 @@ func newRootCmd() *cobra.Command {
 	return rootCmd
 }
 
+// NewRootCmd 导出根命令供测试使用
+func NewRootCmd() *cobra.Command {
+	return newRootCmd()
+}
+
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
