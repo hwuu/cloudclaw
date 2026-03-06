@@ -58,39 +58,63 @@ func TestWaitForSSH_Timeout(t *testing.T) {
 	}
 }
 
-// TestWaitForSSH_OptionsDefaults 测试选项默认值
-func TestWaitForSSH_OptionsDefaults(t *testing.T) {
-	opts := remote.WaitSSHOptions{}
-	// 通过传递零值来测试默认值行为
-	if opts.InitialInterval != 0 {
-		t.Errorf("InitialInterval = %v, want 0 (zero value)", opts.InitialInterval)
-	}
-	if opts.MaxInterval != 0 {
-		t.Errorf("MaxInterval = %v, want 0 (zero value)", opts.MaxInterval)
-	}
-	if opts.Timeout != 0 {
-		t.Errorf("Timeout = %v, want 0 (zero value)", opts.Timeout)
-	}
-}
-
-// TestWaitForSSH_WithOptions 测试带选项的 WaitForSSH
-func TestWaitForSSH_WithOptions(t *testing.T) {
+// TestWaitForSSH_ExponentialBackoff 测试指数退避逻辑
+func TestWaitForSSH_ExponentialBackoff(t *testing.T) {
+	var timestamps []time.Time
 	mockDial := func() (remote.SSHClient, error) {
-		return &mockSSHClient{}, nil
+		timestamps = append(timestamps, time.Now())
+		return nil, context.DeadlineExceeded
 	}
 
 	ctx := context.Background()
+	_, err := remote.WaitForSSH(ctx, mockDial, remote.WaitSSHOptions{
+		InitialInterval: 50 * time.Millisecond,
+		MaxInterval:     200 * time.Millisecond,
+		Timeout:         500 * time.Millisecond,
+	})
+
+	if err == nil {
+		t.Fatal("WaitForSSH() error = nil, want timeout error")
+	}
+
+	// 验证至少重试了 3 次
+	if len(timestamps) < 3 {
+		t.Errorf("retry count = %d, want >= 3", len(timestamps))
+	}
+
+	// 验证指数退避：第二次间隔应大于第一次
+	if len(timestamps) >= 3 {
+		interval1 := timestamps[1].Sub(timestamps[0])
+		interval2 := timestamps[2].Sub(timestamps[1])
+		if interval2 < interval1 {
+			t.Errorf("exponential backoff not working: interval1=%v, interval2=%v", interval1, interval2)
+		}
+	}
+}
+
+// TestWaitForSSH_ContextCancel 测试 context 取消场景
+func TestWaitForSSH_ContextCancel(t *testing.T) {
+	mockDial := func() (remote.SSHClient, error) {
+		return nil, context.DeadlineExceeded
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		cancel()
+	}()
+
 	client, err := remote.WaitForSSH(ctx, mockDial, remote.WaitSSHOptions{
-		InitialInterval: 10 * time.Millisecond,
-		MaxInterval:     50 * time.Millisecond,
+		InitialInterval: 50 * time.Millisecond,
+		MaxInterval:     100 * time.Millisecond,
 		Timeout:         1 * time.Second,
 	})
 
-	if err != nil {
-		t.Fatalf("WaitForSSH() error = %v", err)
+	if err == nil {
+		t.Fatal("WaitForSSH() error = nil, want context canceled error")
 	}
-	if client == nil {
-		t.Fatal("WaitForSSH() client = nil, want non-nil")
+	if client != nil {
+		t.Errorf("WaitForSSH() client = %v, want nil", client)
 	}
 }
 

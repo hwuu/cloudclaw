@@ -29,6 +29,24 @@ func TestUploadFiles_Success(t *testing.T) {
 	}
 }
 
+// TestUploadFiles_EmptyMap 测试空文件 map 边界情况
+func TestUploadFiles_EmptyMap(t *testing.T) {
+	mockClient := &mockSFTPClient{
+		files: make(map[string][]byte),
+	}
+
+	files := map[string][]byte{}
+
+	err := remote.UploadFiles(mockClient, files)
+	if err != nil {
+		t.Fatalf("UploadFiles() error = %v, want nil", err)
+	}
+
+	if len(mockClient.files) != 0 {
+		t.Errorf("uploaded %d files, want 0", len(mockClient.files))
+	}
+}
+
 // TestUploadFiles_Error 测试批量上传文件失败场景（任一失败立即返回）
 func TestUploadFiles_Error(t *testing.T) {
 	mockClient := &mockSFTPClient{
@@ -50,6 +68,29 @@ func TestUploadFiles_Error(t *testing.T) {
 	// 验证错误消息包含期望内容
 	if !strings.Contains(err.Error(), "disk full") {
 		t.Errorf("UploadFiles() error = %v, want to contain 'disk full'", err)
+	}
+}
+
+// TestUploadFiles_MultipleErrors 测试多个文件连续失败场景
+func TestUploadFiles_MultipleErrors(t *testing.T) {
+	mockClient := &mockSFTPClient{
+		files:       make(map[string][]byte),
+		failOnPath:  "/root/cloudclaw/.env",
+		failOnError: errors.New("disk full"),
+	}
+
+	files := map[string][]byte{
+		"/root/cloudclaw/.env": []byte("TOKEN=test"),
+	}
+
+	err := remote.UploadFiles(mockClient, files)
+	if err == nil {
+		t.Fatal("UploadFiles() error = nil, want error")
+	}
+
+	// 验证失败后没有文件被上传
+	if len(mockClient.files) != 0 {
+		t.Errorf("uploaded %d files after error, want 0", len(mockClient.files))
 	}
 }
 

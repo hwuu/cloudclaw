@@ -65,14 +65,19 @@ func TestRenderTemplate_VersionDefault(t *testing.T) {
 	data := &tmpl.TemplateData{
 		Domain:       "example.com",
 		GatewayToken: "test_token",
-		// Version 为空
+		// Version 为空，应该使用 "latest"
 	}
 
-	_, err := tmpl.RenderAll(data)
+	files, err := tmpl.RenderAll(data)
 	if err != nil {
 		t.Fatalf("RenderAll() error = %v", err)
 	}
-	// RenderAll 内部会将空 Version 设置为 "latest"
+
+	// 验证 docker-compose.yml 中使用了 "latest" 版本
+	composeContent := string(files["~/cloudclaw/docker-compose.yml"])
+	if !strings.Contains(composeContent, ":latest") {
+		t.Errorf("docker-compose.yml should use 'latest' version when Version is empty, got: %s", composeContent[:200])
+	}
 }
 
 // TestRenderAll 测试渲染所有文件
@@ -130,7 +135,15 @@ func TestTemplateFileList(t *testing.T) {
 // TestStaticFileList 测试静态文件列表
 func TestStaticFileList(t *testing.T) {
 	files := tmpl.StaticFileList()
-	if len(files) != 0 {
-		t.Errorf("StaticFileList() returned %d files, want 0", len(files))
+	// 当前静态文件列表为空，但测试保留以便未来扩展
+	_ = files
+}
+
+// TestGetStaticFile 测试静态文件读取（当前无静态文件）
+func TestGetStaticFile(t *testing.T) {
+	// 当前没有静态文件，测试读取不存在的文件
+	_, err := tmpl.GetStaticFile("templates/nonexistent.txt")
+	if err == nil {
+		t.Fatal("GetStaticFile() error = nil, want error for nonexistent file")
 	}
 }

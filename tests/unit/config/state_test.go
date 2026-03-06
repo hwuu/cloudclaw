@@ -114,28 +114,79 @@ func TestState_HasSSHKeyPair(t *testing.T) {
 	}
 }
 
-// TestState_IsComplete 测试资源完整性判断
+// TestState_IsComplete 测试资源完整性判断（表驱动测试）
 func TestState_IsComplete(t *testing.T) {
-	// 完整状态
-	s := &config.State{
-		Resources: config.Resources{
-			VPC:           config.VPCResource{ID: "vpc-123"},
-			VSwitch:       config.VSwitchResource{ID: "vsw-123"},
-			SecurityGroup: config.SecurityGroupResource{ID: "sg-123"},
-			ECS:           config.ECSResource{ID: "i-123"},
-			EIP:           config.EIPResource{ID: "eip-123"},
-			SSHKeyPair:    config.SSHKeyPairResource{Name: "cloudclaw-ssh-key"},
+	tests := []struct {
+		name     string
+		setup    func(*config.State)
+		expected bool
+	}{
+		{
+			name:     "all_resources_present",
+			setup:    func(s *config.State) {},
+			expected: true,
+		},
+		{
+			name: "missing_vpc",
+			setup: func(s *config.State) {
+				s.Resources.VPC.ID = ""
+			},
+			expected: false,
+		},
+		{
+			name: "missing_vswitch",
+			setup: func(s *config.State) {
+				s.Resources.VSwitch.ID = ""
+			},
+			expected: false,
+		},
+		{
+			name: "missing_security_group",
+			setup: func(s *config.State) {
+				s.Resources.SecurityGroup.ID = ""
+			},
+			expected: false,
+		},
+		{
+			name: "missing_ecs",
+			setup: func(s *config.State) {
+				s.Resources.ECS.ID = ""
+			},
+			expected: false,
+		},
+		{
+			name: "missing_eip",
+			setup: func(s *config.State) {
+				s.Resources.EIP.ID = ""
+			},
+			expected: false,
+		},
+		{
+			name: "missing_ssh_key_pair",
+			setup: func(s *config.State) {
+				s.Resources.SSHKeyPair.Name = ""
+			},
+			expected: false,
 		},
 	}
 
-	if !s.IsComplete() {
-		t.Error("IsComplete() = false, want true")
-	}
-
-	// 缺少 EIP
-	s.Resources.EIP.ID = ""
-	if s.IsComplete() {
-		t.Error("IsComplete() = true (missing EIP), want false")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &config.State{
+				Resources: config.Resources{
+					VPC:           config.VPCResource{ID: "vpc-123"},
+					VSwitch:       config.VSwitchResource{ID: "vsw-123"},
+					SecurityGroup: config.SecurityGroupResource{ID: "sg-123"},
+					ECS:           config.ECSResource{ID: "i-123"},
+					EIP:           config.EIPResource{ID: "eip-123"},
+					SSHKeyPair:    config.SSHKeyPairResource{Name: "cloudclaw-ssh-key"},
+				},
+			}
+			tt.setup(s)
+			if got := s.IsComplete(); got != tt.expected {
+				t.Errorf("IsComplete() = %v, want %v", got, tt.expected)
+			}
+		})
 	}
 }
 

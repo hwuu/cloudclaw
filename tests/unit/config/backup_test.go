@@ -117,3 +117,38 @@ func TestBackup_JSONFormat(t *testing.T) {
 		t.Errorf("JSON should be indented, got: %s...", string(data)[:20])
 	}
 }
+
+// TestBackup_CorruptedJSON 测试损坏的 JSON 文件
+func TestBackup_CorruptedJSON(t *testing.T) {
+	tempDir := t.TempDir()
+	path := filepath.Join(tempDir, config.BackupFileName)
+
+	// 写入无效的 JSON
+	invalidJSON := `{invalid json content}`
+	err := os.WriteFile(path, []byte(invalidJSON), 0600)
+	if err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	_, err = config.LoadBackupFrom(tempDir)
+	if err == nil {
+		t.Fatal("LoadBackupFrom() error = nil, want JSON parse error")
+	}
+}
+
+// TestBackup_EmptyFile 测试空文件
+func TestBackup_EmptyFile(t *testing.T) {
+	tempDir := t.TempDir()
+	path := filepath.Join(tempDir, config.BackupFileName)
+
+	// 写入空内容
+	err := os.WriteFile(path, []byte(""), 0600)
+	if err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	_, err = config.LoadBackupFrom(tempDir)
+	if err == nil {
+		t.Fatal("LoadBackupFrom() error = nil, want error for empty file")
+	}
+}
